@@ -1,17 +1,12 @@
-# Use official Playwright image with dependencies
-FROM mcr.microsoft.com/playwright:v1.43.0-jammy
+FROM node:18
 
 WORKDIR /app
 
-# Copy the package.json inside the playwright folder
-COPY playwright/package.json ./
-
+COPY server/package.json ./
 RUN npm install
 
-# Copy the rest of the playwright folder
-COPY playwright/. .
+COPY server ./server
 
-# Disable Chromium sandbox
-ENV PLAYWRIGHT_CHROMIUM_NO_SANDBOX=true
+EXPOSE 3000
 
-CMD ["node", "render_canva.js"]
+CMD ["node", "server/index.js"]

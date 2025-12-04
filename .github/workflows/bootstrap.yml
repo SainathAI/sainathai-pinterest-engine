@@ -1,9 +1,10 @@
-name: Bootstrap SainathAI Pinterest Engine
+name: Bootstrap SainathAI Pinterest Engine (Create PR)
 on:
   workflow_dispatch:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   bootstrap:
@@ -13,17 +14,18 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: true
+          fetch-depth: 0
 
       - name: Set up git user
         run: |
           git config user.name "sainathai-bot"
           git config user.email "noreply@sainathai.local"
 
-      - name: Create repo skeleton and files
+      - name: Create repo skeleton files (no pushing here)
+        id: create_files
         run: |
           set -e
-          echo "Starting repo bootstrap..."
-
+          echo "Creating files..."
           mkdir -p n8n/workflows playwright/templates ollama/prompts pinterest/api google utils
 
           cat > README.md <<'README'
@@ -100,7 +102,7 @@ WF
 FROM node:18-slim
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --production
+RUN npm ci --production || true
 COPY . .
 CMD ["node", "render_canva.js"]
 DF
@@ -154,13 +156,37 @@ MIT License
 Copyright (c) 2025 Sainath
 LIC
 
-          git add .
-          git commit -m "chore: bootstrap repo skeleton (sainathai-pinterest-engine)" || true
-          git push origin HEAD || true
-
-          echo "Bootstrap completed. Files added and committed."
+          echo "files-created"
+          git status --porcelain
         shell: bash
 
-      - name: Show results
+      - name: Create branch, commit and push
+        id: commit_and_push
         run: |
-          echo "Bootstrap job finished. Check the repository root for created files and folders."
+          set -e
+          BRANCH="sainathai-bootstrap-$(date +%s)"
+          echo "Creating branch: $BRANCH"
+          git checkout -b "$BRANCH"
+          git add .
+          git commit -m "chore: bootstrap repo skeleton (sainathai-pinterest-engine)" || echo "No changes to commit"
+          git push -u origin "$BRANCH"
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Create Pull Request
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          PR_TITLE="Bootstrap: repo skeleton (SainathAI Pinterest Engine)"
+          PR_BODY="This PR was created automatically by the bootstrap workflow. It includes starter files for the Pinterest automation engine (n8n workflows, Playwright scaffold, Ollama prompts, docker-compose, etc.)."
+          API_URL="https://api.github.com/repos/${{ github.repository }}/pulls"
+          echo "Creating PR for branch: $BRANCH"
+          curl -s -X POST -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -d "{\"title\":\"$PR_TITLE\",\"head\":\"$BRANCH\",\"base\":\"main\",\"body\":\"$PR_BODY\"}" \
+            $API_URL | jq . || true
+
+      - name: Print result message
+        run: |
+          echo "Bootstrap PR created (or attempted). Check Pull Requests tab for the branch and review."

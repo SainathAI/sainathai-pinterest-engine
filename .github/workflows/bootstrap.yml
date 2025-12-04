@@ -1,0 +1,45 @@
+name: Bootstrap Repo
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create basic folder structure
+        run: |
+          mkdir -p n8n/workflows
+          mkdir -p playwright
+          mkdir -p ollama/prompts
+          mkdir -p pinterest/api
+          mkdir -p google
+          mkdir -p utils
+
+          touch README.md
+          touch .gitignore
+          touch docker-compose.yml
+          touch .env.example
+          touch LICENSE
+
+      - name: Commit changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Bootstrap: repo structure"
+          branch: bootstrap-init
+          create_branch: true
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: bootstrap-init
+          title: "Bootstrap: initialize repo structure"
+          body: "Automatically generated initial folder and file structure."
+          base: main

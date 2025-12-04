@@ -1,4 +1,4 @@
-name: Deploy SainathAI Pinterest Engine (Create PR)
+name: Deploy Pinterest Engine (Minimal)
 on:
   workflow_dispatch:
 
@@ -9,124 +9,53 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          persist-credentials: true
 
-      - name: Configure git
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Git
         run: |
           git config user.name "sainathai-bot"
-          git config user.email "noreply@sainathai.local"
+          git config user.email "noreply@sainathaibot.local"
 
-      - name: Prepare folders
+      - name: Create folders and placeholder files
         run: |
           mkdir -p n8n/workflows
           mkdir -p playwright
           mkdir -p ollama/prompts
           mkdir -p pinterest/api
-          mkdir -p google
-          mkdir -p utils
 
-      - name: Add n8n workflow: rotation-scheduler
-        run: |
-          printf '%s\n' '{"name":"rotation-scheduler","nodes":[{"parameters":{"mode":"on","cronExpression":"0 3 * * *"},"id":"cron-1","name":"Daily Cron","type":"n8n-nodes-base.cron"},{"parameters":{},"id":"function-1","name":"Decide Niche","type":"n8n-nodes-base.function"},{"parameters":{"path":"content-generator"},"id":"webhook-1","name":"Trigger Content Generator","type":"n8n-nodes-base.webhook"}],"connections":{}}' > n8n/workflows/rotation-scheduler.json
+          touch n8n/workflows/rotation-scheduler.json
+          touch n8n/workflows/content-generator.json
+          touch n8n/workflows/canva-builder.json
+          touch n8n/workflows/export-monitor.json
+          touch n8n/workflows/pinterest-poster.json
+          touch n8n/workflows/analytics-engine.json
 
-      - name: Add n8n workflow: content-generator
-        run: |
-          printf '%s\n' '{"name":"content-generator","nodes":[{"parameters":{"httpMethod":"POST","path":"content-generator"},"id":"webhook-cg","name":"Webhook Trigger","type":"n8n-nodes-base.webhook"},{"parameters":{"requestMethod":"POST","url":"${OLLAMA_HOST:-http://localhost:11434}/api/generate"},"id":"http-ollama","name":"Call Ollama (LLM)","type":"n8n-nodes-base.httpRequest"},{"parameters":{},"id":"sheets-append","name":"Append to Google Sheets","type":"n8n-nodes-base.googleSheets"}],"connections":{}}' > n8n/workflows/content-generator.json
+          touch playwright/package.json
+          touch playwright/render_canva.js
 
-      - name: Add n8n workflow: canva-builder
-        run: |
-          printf '%s\n' '{"name":"canva-builder","nodes":[{"parameters":{"operation":"read"},"id":"sheets-read","name":"Read Pending Rows","type":"n8n-nodes-base.googleSheets"},{"parameters":{},"id":"function-buildcsv","name":"Build CSV for Canva","type":"n8n-nodes-base.function"},{"parameters":{"url":"${PLAYWRIGHT_RENDERER_URL:-http://playwright-renderer/render}"},"id":"http-playwright","name":"Trigger Playwright Renderer","type":"n8n-nodes-base.httpRequest"}],"connections":{}}' > n8n/workflows/canva-builder.json
+          touch ollama/prompts/ai-tools.txt
+          touch ollama/prompts/productivity.txt
+          touch ollama/prompts/digital-marketing.txt
+          touch ollama/prompts/mmo.txt
 
-      - name: Add n8n workflow: export-monitor
-        run: |
-          printf '%s\n' '{"name":"export-monitor","nodes":[{"parameters":{"path":"playwright/output"},"id":"fs-watch","name":"Watch Output","type":"n8n-nodes-base.watch"},{"parameters":{},"id":"drive-upload","name":"Upload to Google Drive","type":"n8n-nodes-base.googleDrive"},{"parameters":{},"id":"sheets-update","name":"Mark Ready in Sheets","type":"n8n-nodes-base.googleSheets"}],"connections":{}}' > n8n/workflows/export-monitor.json
+          touch pinterest/api/post-pin.js
 
-      - name: Add n8n workflow: pinterest-poster
-        run: |
-          printf '%s\n' '{"name":"pinterest-poster","nodes":[{"parameters":{"operation":"read"},"id":"sheets-get-ready","name":"Get Ready Pins","type":"n8n-nodes-base.googleSheets"},{"parameters":{"requestMethod":"POST","url":"https://api.pinterest.com/v5/pins"},"id":"http-pinterest","name":"Post to Pinterest","type":"n8n-nodes-base.httpRequest"},{"parameters":{},"id":"sheets-mark-posted","name":"Mark Posted","type":"n8n-nodes-base.googleSheets"}],"connections":{}}' > n8n/workflows/pinterest-poster.json
-
-      - name: Add n8n workflow: analytics-engine
-        run: |
-          printf '%s\n' '{"name":"analytics-engine","nodes":[{"parameters":{"cronExpression":"0 4 * * 0"},"id":"cron-analytics","name":"Weekly Cron","type":"n8n-nodes-base.cron"},{"parameters":{"requestMethod":"GET","url":"https://api.pinterest.com/v5/analytics/boards"},"id":"http-analytics","name":"Pull Pinterest Analytics","type":"n8n-nodes-base.httpRequest"},{"parameters":{},"id":"sheets-write-analytics","name":"Write Analytics to Sheets","type":"n8n-nodes-base.googleSheets"}],"connections":{}}' > n8n/workflows/analytics-engine.json
-
-      - name: Add Playwright renderer files (safe writes)
-        run: |
-          printf '%s\n' '{"name":"playwright-renderer","version":"1.0.0","scripts":{"start":"node render_canva.js"}}' > playwright/package.json
-          printf '%s\n' 'FROM node:18-slim' > playwright/Dockerfile
-          printf '%s\n' 'WORKDIR /app' >> playwright/Dockerfile
-          printf '%s\n' 'COPY package.json ./' >> playwright/Dockerfile
-          printf '%s\n' 'RUN npm ci --production || true' >> playwright/Dockerfile
-          printf '%s\n' 'COPY . .' >> playwright/Dockerfile
-          printf '%s\n' 'CMD ["node","render_canva.js"]' >> playwright/Dockerfile
-
-          printf '%s\n' '/**' > playwright/render_canva.js
-          printf '%s\n' ' * render_canva.js' >> playwright/render_canva.js
-          printf '%s\n' ' * Minimal Playwright automation scaffold (placeholder).' >> playwright/render_canva.js
-          printf '%s\n' ' */' >> playwright/render_canva.js
-          printf '%s\n' '(async () => {' >> playwright/render_canva.js
-          printf '%s\n' '  console.log("Playwright renderer placeholder started.");' >> playwright/render_canva.js
-          printf '%s\n' '  // Implement login, template open, csv bulk populate, export flow here.' >> playwright/render_canva.js
-          printf '%s\n' '  // Write exported files to ./output and return metadata.' >> playwright/render_canva.js
-          printf '%s\n' '})();' >> playwright/render_canva.js
-
-      - name: Add Ollama prompt packs
-        run: |
-          printf '%s\n' '# AI Tools prompts' > ollama/prompts/ai-tools.txt
-          printf '%s\n' 'Generate 50 high-CTR Pinterest pin titles and 2-line descriptions for AI tools that emphasize ease, prompts, and automation.' >> ollama/prompts/ai-tools.txt
-          printf '%s\n' '# Productivity prompts' > ollama/prompts/productivity.txt
-          printf '%s\n' 'Generate 50 high-CTR Pinterest pin titles and short descriptions for productivity hacks using AI.' >> ollama/prompts/productivity.txt
-          printf '%s\n' '# Digital Marketing prompts' > ollama/prompts/digital-marketing.txt
-          printf '%s\n' 'Generate 50 high-CTR Pinterest pin titles and descriptions for digital marketing micro-niches.' >> ollama/prompts/digital-marketing.txt
-          printf '%s\n' '# MMO prompts' > ollama/prompts/mmo.txt
-          printf '%s\n' 'Generate 50 high-CTR Pinterest pin titles and descriptions for Make Money Online (AI methods).' >> ollama/prompts/mmo.txt
-
-      - name: Add Pinterest API scaffold
-        run: |
-          printf '%s\n' "const fetch = require('node-fetch');" > pinterest/api/post-pin.js
-          printf '%s\n' "module.exports = async function postPin(data){" >> pinterest/api/post-pin.js
-          printf '%s\n' "  console.log('postPin placeholder', data);" >> pinterest/api/post-pin.js
-          printf '%s\n' "};" >> pinterest/api/post-pin.js
-
-      - name: Add README and env example
-        run: |
-          printf '%s\n' '# SainathAI Pinterest Engine' > README.md
-          printf '%s\n' '' >> README.md
-          printf '%s\n' 'Bootstrap of n8n workflows, Playwright renderer, and Ollama prompts.' >> README.md
-          printf '%s\n' 'N8N_HOST=localhost' > .env.example
-          printf '%s\n' 'N8N_PORT=5678' >> .env.example
-          printf '%s\n' 'OLLAMA_HOST=http://localhost:11434' >> .env.example
-          printf '%s\n' 'PINTEREST_ACCESS_TOKEN=' >> .env.example
-          printf '%s\n' 'GOOGLE_SA_KEY_PATH=google/credentials.json' >> .env.example
-          printf '%s\n' 'PLAYWRIGHT_RENDERER_URL=http://playwright-renderer/render' >> .env.example
-
-      - name: Stage changes
+      - name: Commit changes
         run: |
           git add -A
-          git commit -m "chore: deploy pinterest engine artifacts" || echo "no changes to commit"
+          git commit -m "Minimal deploy: placeholder files" || echo "No changes"
 
-      - name: Create Pull Request (auto)
+      - name: Create Pull Request
         uses: peter-evans/create-pull-request@v5
         with:
-          token: ${{ secrets.GH_PAT || github.token }}
-          commit-message: "chore: deploy pinterest engine artifacts"
-          branch: deploy-pinterest-engine-${{ github.run_id }}
-          title: "Deploy: SainathAI Pinterest Engine (workflows, renderer, prompts)"
+          token: ${{ secrets.GH_PAT }}
+          commit-message: "Minimal deploy: placeholder files"
+          branch: deploy-engine-min-${{ github.run_id }}
+          title: "Deploy Engine (Minimal Placeholder Structure)"
           body: |
-            This PR deploys the SainathAI Pinterest Engine:
-            - n8n workflows (rotation, generator, canva, export, poster, analytics)
-            - Playwright renderer scaffold
-            - Ollama prompt packs
-            - Pinterest API scaffold
-            - README and .env.example
-
-            After merging:
-            1. Import n8n workflows (or mount n8n/workflows).
-            2. Set required secrets/credentials in n8n and repo.
-            3. Deploy Playwright renderer (docker build) or run locally.
-            4. Run a dry run with small batch size to validate end-to-end.
+            This PR sets up the base folder and file scaffolding.
+            Next PR will inject full engine logic.
           base: main

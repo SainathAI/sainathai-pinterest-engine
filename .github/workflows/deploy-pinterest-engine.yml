@@ -1,0 +1,117 @@
+name: Deploy SainathAI Pinterest Engine (Create PR)
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Configure git
+        run: |
+          git config user.name "sainathai-bot"
+          git config user.email "noreply@sainathai.local"
+
+      - name: Prepare folders
+        run: |
+          mkdir -p n8n/workflows
+          mkdir -p playwright
+          mkdir -p ollama/prompts
+          mkdir -p pinterest/api
+          mkdir -p google
+          mkdir -p utils
+
+      - name: Add n8n workflow: rotation-scheduler
+        run: |
+          echo '{"name":"rotation-scheduler","nodes":[{"parameters":{"mode":"on","cronExpression":"0 3 * * *"},"id":"cron-1","name":"Daily Cron","type":"n8n-nodes-base.cron"},{"parameters":{},"id":"function-1","name":"Decide Niche","type":"n8n-nodes-base.function"},{"parameters":{"path":"content-generator"},"id":"webhook-1","name":"Trigger Content Generator","type":"n8n-nodes-base.webhook"}],"connections":{}}' > n8n/workflows/rotation-scheduler.json
+
+      - name: Add n8n workflow: content-generator
+        run: |
+          echo '{"name":"content-generator","nodes":[{"parameters":{"httpMethod":"POST","path":"content-generator"},"id":"webhook-cg","name":"Webhook Trigger","type":"n8n-nodes-base.webhook"},{"parameters":{"requestMethod":"POST","url":"${OLLAMA_HOST:-http://localhost:11434}/api/generate"},"id":"http-ollama","name":"Call Ollama (LLM)","type":"n8n-nodes-base.httpRequest"},{"parameters":{},"id":"sheets-append","name":"Append to Google Sheets","type":"n8n-nodes-base.googleSheets"}],"connections":{}}' > n8n/workflows/content-generator.json
+
+      - name: Add n8n workflow: canva-builder
+        run: |
+          echo '{"name":"canva-builder","nodes":[{"parameters":{"operation":"read"},"id":"sheets-read","name":"Read Pending Rows","type":"n8n-nodes-base.googleSheets"},{"parameters":{},"id":"function-buildcsv","name":"Build CSV for Canva","type":"n8n-nodes-base.function"},{"parameters":{"url":"${PLAYWRIGHT_RENDERER_URL:-http://playwright-renderer/render}"},"id":"http-playwright","name":"Trigger Playwright Renderer","type":"n8n-nodes-base.httpRequest"}],"connections":{}}' > n8n/workflows/canva-builder.json
+
+      - name: Add n8n workflow: export-monitor
+        run: |
+          echo '{"name":"export-monitor","nodes":[{"parameters":{"path":"playwright/output"},"id":"fs-watch","name":"Watch Output","type":"n8n-nodes-base.watch"},{"parameters":{},"id":"drive-upload","name":"Upload to Google Drive","type":"n8n-nodes-base.googleDrive"},{"parameters":{},"id":"sheets-update","name":"Mark Ready in Sheets","type":"n8n-nodes-base.googleSheets"}],"connections":{}}' > n8n/workflows/export-monitor.json
+
+      - name: Add n8n workflow: pinterest-poster
+        run: |
+          echo '{"name":"pinterest-poster","nodes":[{"parameters":{"operation":"read"},"id":"sheets-get-ready","name":"Get Ready Pins","type":"n8n-nodes-base.googleSheets"},{"parameters":{"requestMethod":"POST","url":"https://api.pinterest.com/v5/pins"},"id":"http-pinterest","name":"Post to Pinterest","type":"n8n-nodes-base.httpRequest"},{"parameters":{},"id":"sheets-mark-posted","name":"Mark Posted","type":"n8n-nodes-base.googleSheets"}],"connections":{}}' > n8n/workflows/pinterest-poster.json
+
+      - name: Add n8n workflow: analytics-engine
+        run: |
+          echo '{"name":"analytics-engine","nodes":[{"parameters":{"cronExpression":"0 4 * * 0"},"id":"cron-analytics","name":"Weekly Cron","type":"n8n-nodes-base.cron"},{"parameters":{"requestMethod":"GET","url":"https://api.pinterest.com/v5/analytics/boards"},"id":"http-analytics","name":"Pull Pinterest Analytics","type":"n8n-nodes-base.httpRequest"},{"parameters":{},"id":"sheets-write-analytics","name":"Write Analytics to Sheets","type":"n8n-nodes-base.googleSheets"}],"connections":{}}' > n8n/workflows/analytics-engine.json
+
+      - name: Add Playwright renderer files
+        run: |
+          echo '{"name":"playwright-renderer","version":"1.0.0","scripts":{"start":"node render_canva.js"}}' > playwright/package.json
+          echo 'FROM node:18-slim\nWORKDIR /app\nCOPY package.json ./\nRUN npm ci --production || true\nCOPY . .\nCMD ["node","render_canva.js"]' > playwright/Dockerfile
+          cat > playwright/render_canva.js <<'JS'
+/**
+ * render_canva.js
+ * Minimal Playwright automation scaffold (placeholder).
+ * Replace with your selectors and Canva automation steps.
+ */
+(async () => {
+  console.log("Playwright renderer placeholder started.");
+  // Implement login, template open, csv bulk populate, export flow here.
+  // Write exported files to ./output and return metadata.
+})();
+JS
+
+      - name: Add Ollama prompt packs
+        run: |
+          echo '# AI Tools prompts\nGenerate 50 high-CTR Pinterest pin titles and 2-line descriptions for AI tools that emphasize ease, prompts, and automation.' > ollama/prompts/ai-tools.txt
+          echo '# Productivity prompts\nGenerate 50 high-CTR Pinterest pin titles and short descriptions for productivity hacks using AI.' > ollama/prompts/productivity.txt
+          echo '# Digital Marketing prompts\nGenerate 50 high-CTR Pinterest pin titles and descriptions for digital marketing micro-niches.' > ollama/prompts/digital-marketing.txt
+          echo '# MMO prompts\nGenerate 50 high-CTR Pinterest pin titles and descriptions for Make Money Online (AI methods).' > ollama/prompts/mmo.txt
+
+      - name: Add Pinterest API scaffold
+        run: |
+          echo "const fetch = require('node-fetch');\nmodule.exports = async function postPin(data){\n  // Add PIN posting logic here. Use PINTEREST_ACCESS_TOKEN from env.\n  console.log('postPin placeholder', data);\n};" > pinterest/api/post-pin.js
+
+      - name: Add README and env example
+        run: |
+          echo '# SainathAI Pinterest Engine\n\nBootstrap of n8n workflows, Playwright renderer, and Ollama prompts.' > README.md
+          echo 'N8N_HOST=localhost\nN8N_PORT=5678\nOLLAMA_HOST=http://localhost:11434\nPINTEREST_ACCESS_TOKEN=\nGOOGLE_SA_KEY_PATH=google/credentials.json\nPLAYWRIGHT_RENDERER_URL=http://playwright-renderer/render' > .env.example
+
+      - name: Stage changes
+        run: |
+          git add -A
+          git commit -m "chore: deploy pinterest engine artifacts" || echo "no changes to commit"
+
+      - name: Create Pull Request (auto)
+        uses: peter-evans/create-pull-request@v5
+        with:
+          # If your org blocks Actions from creating PRs, create a repo secret named GH_PAT and put a PAT there.
+          # The action will use GH_PAT if present; otherwise it will fall back to the default token.
+          token: ${{ secrets.GH_PAT || github.token }}
+          commit-message: "chore: deploy pinterest engine artifacts"
+          branch: deploy-pinterest-engine-${{ github.run_id }}
+          title: "Deploy: SainathAI Pinterest Engine (workflows, renderer, prompts)"
+          body: |
+            This PR deploys the SainathAI Pinterest Engine:
+            - n8n workflows (rotation, generator, canva, export, poster, analytics)
+            - Playwright renderer scaffold
+            - Ollama prompt packs
+            - Pinterest API scaffold
+            - README and .env.example
+
+            After merging:
+            1. Import n8n workflows (or mount n8n/workflows).
+            2. Set required secrets/credentials in n8n and repo.
+            3. Deploy Playwright renderer (docker build) or run locally.
+            4. Run a dry run with small batch size to validate end-to-end.
+          base: main

@@ -30,11 +30,21 @@ jobs:
 
           cat > README.md <<'README'
 # sainathai-pinterest-engine (Bootstrap)
+
 This repository was initialized by the SainathAI Bootstrap Action.
-It contains starter artifacts for the Pinterest Automation Engine.
+It contains starter artifacts for the Pinterest Automation Engine:
+- n8n workflows (placeholders)
+- Playwright renderer scaffold
+- Ollama prompts scaffold
+- Pinterest posting microservice scaffold
+- Google Sheets / Drive helpers
+- Docker compose and env example
+
+Edit files, add credentials, then run the n8n workflows.
 README
 
           cat > .gitignore <<'GITIGNORE'
+# n8n data
 n8n/data/
 .env
 node_modules/
@@ -45,6 +55,7 @@ GITIGNORE
 
           cat > docker-compose.yml <<'DC'
 version: "3.8"
+
 services:
   n8n:
     image: n8nio/n8n
@@ -81,12 +92,19 @@ services:
 DC
 
           cat > .env.example <<'ENV'
+# n8n
 N8N_HOST=localhost
 N8N_PORT=5678
 N8N_PROTOCOL=http
 N8N_ENCRYPTION_KEY=replace_with_secure_key
+
+# Google
 GOOGLE_SA_KEY_PATH=google/credentials.json
+
+# Pinterest
 PINTEREST_ACCESS_TOKEN=
+
+# Ollama (if used locally)
 OLLAMA_HOST=http://localhost:11434
 ENV
 
@@ -108,6 +126,11 @@ CMD ["node", "render_canva.js"]
 DF
 
           cat > playwright/render_canva.js <<'JS'
+/**
+ * render_canva.js
+ * Placeholder Playwright script to automate Canva bulk create.
+ * Replace with your Playwright automation logic.
+ */
 (async () => {
   console.log("Playwright renderer placeholder - implement automation here.");
 })();
@@ -135,12 +158,17 @@ P
 
           cat > pinterest/api/post-pin.js <<'NODE'
 /**
- * post-pin.js (placeholder)
+ * post-pin.js
+ * Pinterest posting scaffold - for use inside n8n or as a microservice.
  */
 console.log("Pinterest API scaffold - add posting logic or use within n8n HTTP Request nodes.");
 NODE
 
           cat > google/sheets.js <<'JS'
+/**
+ * sheets.js
+ * Placeholder - Google Sheets helper to read/write rows.
+ */
 module.exports = {};
 JS
 
@@ -179,14 +207,4 @@ LIC
         run: |
           set -e
           PR_TITLE="Bootstrap: repo skeleton (SainathAI Pinterest Engine)"
-          PR_BODY="This PR was created automatically by the bootstrap workflow. It includes starter files for the Pinterest automation engine (n8n workflows, Playwright scaffold, Ollama prompts, docker-compose, etc.)."
-          API_URL="https://api.github.com/repos/${{ github.repository }}/pulls"
-          echo "Creating PR for branch: $BRANCH"
-          curl -s -X POST -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
-            -d "{\"title\":\"$PR_TITLE\",\"head\":\"$BRANCH\",\"base\":\"main\",\"body\":\"$PR_BODY\"}" \
-            $API_URL | jq . || true
-
-      - name: Print result message
-        run: |
-          echo "Bootstrap PR created (or attempted). Check Pull Requests tab for the branch and review."
+          PR_BODY="This PR was created automatically by the bootstrap workflow. It includes starter fil_

@@ -5,13 +5,22 @@ import postPin from "../pinterest/api/postPin.js";
 
 dotenv.config();
 
+const express = require('express');
 const app = express();
-app.use(cors());
-app.use(express.json({ limit: "10mb" }));
 
-// Health check
-app.get("/healthz", (req, res) => {
-  res.status(200).send("OK");
+// health endpoint
+app.get('/healthz', (req, res) => {
+  res.send('OK');
+});
+
+// your other routes, middleware, or logic here
+// For example if you have a pinterest-api module:
+// const pinterest = require('./pinterest-api');
+// app.use('/api', pinterest);
+
+const port = process.env.PORT || 3000;
+app.listen(port, () => {
+  console.log(`listening on ${port}`);
 });
 
 // Generate Content (LLM)

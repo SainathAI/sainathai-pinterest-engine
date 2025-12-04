@@ -1,0 +1,166 @@
+name: Bootstrap SainathAI Pinterest Engine
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Set up git user
+        run: |
+          git config user.name "sainathai-bot"
+          git config user.email "noreply@sainathai.local"
+
+      - name: Create repo skeleton and files
+        run: |
+          set -e
+          echo "Starting repo bootstrap..."
+
+          mkdir -p n8n/workflows playwright/templates ollama/prompts pinterest/api google utils
+
+          cat > README.md <<'README'
+# sainathai-pinterest-engine (Bootstrap)
+This repository was initialized by the SainathAI Bootstrap Action.
+It contains starter artifacts for the Pinterest Automation Engine.
+README
+
+          cat > .gitignore <<'GITIGNORE'
+n8n/data/
+.env
+node_modules/
+*.zip
+playwright/output/
+google/credentials.json
+GITIGNORE
+
+          cat > docker-compose.yml <<'DC'
+version: "3.8"
+services:
+  n8n:
+    image: n8nio/n8n
+    container_name: sainathai_n8n
+    ports:
+      - "5678:5678"
+    volumes:
+      - ./n8n/data:/home/node/.n8n
+      - ./n8n/workflows:/workflows
+    environment:
+      - TZ=Asia/Kolkata
+      - N8N_LOG_OUTPUT=console
+      - N8N_ENCRYPTION_KEY=replace_with_secure_key
+    restart: always
+
+  playwright:
+    build: ./playwright
+    container_name: sainathai_playwright
+    volumes:
+      - ./playwright:/app
+      - ./playwright/output:/output
+    environment:
+      - NODE_ENV=production
+    restart: always
+
+  ollama:
+    image: ollama/ollama
+    container_name: sainathai_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./ollama:/root/.ollama
+    restart: always
+DC
+
+          cat > .env.example <<'ENV'
+N8N_HOST=localhost
+N8N_PORT=5678
+N8N_PROTOCOL=http
+N8N_ENCRYPTION_KEY=replace_with_secure_key
+GOOGLE_SA_KEY_PATH=google/credentials.json
+PINTEREST_ACCESS_TOKEN=
+OLLAMA_HOST=http://localhost:11434
+ENV
+
+          cat > n8n/workflows/rotation-scheduler.json <<'WF'
+{
+  "name": "rotation-scheduler",
+  "nodes": [],
+  "connections": {}
+}
+WF
+
+          cat > playwright/Dockerfile <<'DF'
+FROM node:18-slim
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --production
+COPY . .
+CMD ["node", "render_canva.js"]
+DF
+
+          cat > playwright/render_canva.js <<'JS'
+(async () => {
+  console.log("Playwright renderer placeholder - implement automation here.");
+})();
+JS
+
+          cat > ollama/prompts/ai-tools.txt <<'P'
+# Ollama prompt: AI Tools
+Generate Pinterest pin titles for AI Tools niche.
+P
+
+          cat > ollama/prompts/productivity.txt <<'P'
+# Ollama prompt: Productivity
+Generate Pinterest pin titles for Productivity niche.
+P
+
+          cat > ollama/prompts/digital-marketing.txt <<'P'
+# Ollama prompt: Digital Marketing
+Generate Pinterest pin titles for Digital Marketing micro-niches.
+P
+
+          cat > ollama/prompts/mmo.txt <<'P'
+# Ollama prompt: Make Money Online (MMO)
+Generate Pinterest pin titles for Make Money Online (AI workflows).
+P
+
+          cat > pinterest/api/post-pin.js <<'NODE'
+/**
+ * post-pin.js (placeholder)
+ */
+console.log("Pinterest API scaffold - add posting logic or use within n8n HTTP Request nodes.");
+NODE
+
+          cat > google/sheets.js <<'JS'
+module.exports = {};
+JS
+
+          cat > utils/logger.js <<'LOG'
+module.exports = {
+  info: (...args) => console.log("[INFO]", ...args),
+  err: (...args) => console.error("[ERROR]", ...args)
+};
+LOG
+
+          cat > LICENSE <<'LIC'
+MIT License
+Copyright (c) 2025 Sainath
+LIC
+
+          git add .
+          git commit -m "chore: bootstrap repo skeleton (sainathai-pinterest-engine)" || true
+          git push origin HEAD || true
+
+          echo "Bootstrap completed. Files added and committed."
+        shell: bash
+
+      - name: Show results
+        run: |
+          echo "Bootstrap job finished. Check the repository root for created files and folders."

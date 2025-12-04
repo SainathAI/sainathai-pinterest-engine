@@ -1,0 +1,8 @@
+{
+  "name": "playwright-renderer",
+  "version": "1.0.0",
+  "main": "render_canva.js",
+  "dependencies": {
+    "playwright": "^1.43.0"
+  }
+}

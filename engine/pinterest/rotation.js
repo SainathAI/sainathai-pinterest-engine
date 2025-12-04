@@ -1,11 +1,8 @@
 const niches = [
-  "Motivation",
-  "Health Tips",
-  "Technology",
-  "Business Quotes",
-  "Mindset",
-  "Fitness",
-  "AI Tools"
+  "Mindset & Motivation",
+  "Business & Entrepreneurship",
+  "AI Tools & Automation",
+  "Health & Fitness Tips"
 ];
 
 let index = 0;

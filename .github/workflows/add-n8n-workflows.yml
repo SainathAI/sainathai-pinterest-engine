@@ -69,7 +69,7 @@ jobs:
       - name: Create Pull Request (auto)
         uses: peter-evans/create-pull-request@v5
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GH_PAT }}
           commit-message: "chore: add n8n workflow JSON files"
           branch: add-n8n-workflows-${{ github.run_id }}
           title: "Add n8n workflow JSON placeholders"

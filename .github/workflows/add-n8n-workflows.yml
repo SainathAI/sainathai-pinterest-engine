@@ -4,7 +4,8 @@ on:
 
 permissions:
   contents: write
-
+  pull-requests: write
+  
 jobs:
   add-workflows:
     runs-on: ubuntu-latest

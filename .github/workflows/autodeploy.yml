@@ -1,58 +1,110 @@
-name: Autopush to HuggingFace Space
+name: Diagnose & Push to HuggingFace (Verbose, Safe)
 
 on:
-  push:
-    branches: [ "main" ]
   workflow_dispatch:
+  push:
+    branches: ["main"]
 
 permissions:
   contents: read
   actions: read
 
 jobs:
-  push-to-hf:
+  push-to-hf-diagnose:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Configure git user
+      - name: Runner info
         run: |
-          git config --global user.email "bot@sainathai.com"
-          git config --global user.name "SainathAI Bot"
+          echo "RUNNER_OS=$RUNNER_OS"
+          echo "GITHUB_REPOSITORY=$GITHUB_REPOSITORY"
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          uname -a || true
+          git --version || true
+          python3 --version || true
 
-      - name: Add HF remote and push
+      - name: List repo files (top-level)
+        run: |
+          echo "=== REPO ROOT ==="
+          ls -la || true
+          echo "=== .github/workflows ==="
+          ls -la .github/workflows || true
+
+      - name: Print which secrets are set (masked)
+        env:
+          HF: ${{ secrets.HF_ACCESS_TOKEN }}
+          HF_OWNER: ${{ secrets.HF_SPACE_OWNER }}
+          HF_SPACE: ${{ secrets.HF_SPACE_NAME }}
+          GH_PAT: ${{ secrets.GH_PAT_ACCESS }}
+        run: |
+          for s in HF HF_OWNER HF_SPACE GH_PAT OPEN_AI_KEY PINTEREST_ACCESS_TOKEN; do
+            if [ -z "${!s:-}" ]; then
+              echo "$s = MISSING"
+            else
+              echo "$s = SET"
+            fi
+          done
+
+      - name: Push to HuggingFace (diagnostic, verbose)
         env:
           HF_ACCESS_TOKEN: ${{ secrets.HF_ACCESS_TOKEN }}
           HF_SPACE_OWNER: ${{ secrets.HF_SPACE_OWNER }}
           HF_SPACE_NAME: ${{ secrets.HF_SPACE_NAME }}
         run: |
-          if [ -z "${HF_ACCESS_TOKEN}" ] || [ -z "${HF_SPACE_OWNER}" ] || [ -z "${HF_SPACE_NAME}" ]; then
-            echo "Missing one of HF_ACCESS_TOKEN / HF_SPACE_OWNER / HF_SPACE_NAME. Aborting."
-            exit 1
+          set -euxo pipefail
+
+          if [ -z "${HF_ACCESS_TOKEN:-}" ]; then
+            echo "ERROR: HF_ACCESS_TOKEN is not set. Aborting."
+            exit 2
           fi
-          set -eux
+          if [ -z "${HF_SPACE_OWNER:-}" ] || [ -z "${HF_SPACE_NAME:-}" ]; then
+            echo "ERROR: HF_SPACE_OWNER or HF_SPACE_NAME not set. Aborting."
+            exit 2
+          fi
+
+          echo ">>> git status"
+          git status --porcelain -b || true
+          echo ">>> git show --summary HEAD"
+          git show --summary --oneline -1 || true
+          echo ">>> ls -la"
+          ls -la || true
+
           HF_REMOTE_URL="https://${HF_SPACE_OWNER}:${HF_ACCESS_TOKEN}@huggingface.co/spaces/${HF_SPACE_OWNER}/${HF_SPACE_NAME}.git"
-          # add remote only if not present
-          if git remote | grep -q "^hf$"; then
-            git remote remove hf || true
-          fi
-          git remote add hf "${HF_REMOTE_URL}"
-          git push hf HEAD:main --force
+          echo "Adding remote 'hf' (url masked)"
+          # remove existing hf remote to avoid conflicts
+          git remote remove hf || true
+          git remote add hf "$HF_REMOTE_URL"
 
-      - name: Trigger HF rebuild
+          echo "git remote -v"
+          git remote -v
+
+          echo "Trying git push to HF (this will be verbose and show error)."
+          # use explicit refspec to main branch
+          # capture both stdout and stderr
+          if git push hf HEAD:main --force; then
+            echo "GIT PUSH: SUCCESS"
+          else
+            echo "GIT PUSH: FAILED (exit code $?)"
+            # show remote info from git ls-remote
+            echo "=== git ls-remote hf ==="
+            git ls-remote hf || true
+            # show last 200 lines of err
+            exit 3
+          fi
+
+      - name: Trigger HF build (show response)
         env:
           HF_ACCESS_TOKEN: ${{ secrets.HF_ACCESS_TOKEN }}
           HF_SPACE_OWNER: ${{ secrets.HF_SPACE_OWNER }}
           HF_SPACE_NAME: ${{ secrets.HF_SPACE_NAME }}
         run: |
-          if [ -z "${HF_ACCESS_TOKEN}" ]; then
-            echo "HF token missing; cannot trigger build"
-            exit 0
-          fi
+          set -eux
           curl -s -X POST \
             -H "Authorization: Bearer ${HF_ACCESS_TOKEN}" \
-            "https://huggingface.co/api/spaces/${HF_SPACE_OWNER}/${HF_SPACE_NAME}/build" \
-            -o /tmp/hf_build_response.json || true
-          echo "HF build response:"
-          sed -n '1,200p' /tmp/hf_build_response.json || true
+            "https://huggingface.co/api/spaces/${HF_SPACE_OWNER}/${HF_SPACE_NAME}/build" -o /tmp/hf_build.json || true
+          echo "---- HF build response ----"
+          sed -n '1,200p' /tmp/hf_build.json || true

@@ -29,7 +29,7 @@ jobs:
 
       - name: Create folder structure
         run: |
-          mkdir -p server playwright engine pinterest ollama/prompts n8n/workflows
+          mkdir -p server playwright engine/pinterest ollama/prompts n8n/workflows
 
       - name: Write Dockerfile (HF-compatible)
         run: |
@@ -38,12 +38,15 @@ FROM mcr.microsoft.com/playwright:v1.43.0-jammy
 
 WORKDIR /app
 
+# Copy root package if exists (keeps build tolerant)
 COPY package.json package.json
 COPY playwright/package.json playwright/package.json
 
+# Install dependencies (best-effort; allow failure to avoid fast crash)
 RUN npm install --production || true
-RUN cd playwright && npm install --production || true
+RUN if [ -f playwright/package.json ]; then (cd playwright && npm install --production) || true; fi
 
+# Copy whole repo into container
 COPY . /app
 
 EXPOSE 7860
@@ -72,6 +75,7 @@ PKG_EOF
 
       - name: Write server files
         run: |
+          mkdir -p server
           cat > server/index.js <<'SRV_EOF'
 const express = require("express");
 const cors = require("cors");
@@ -110,6 +114,7 @@ PIN_EOF
 
       - name: Write playwright package.json
         run: |
+          mkdir -p playwright
           cat > playwright/package.json <<'PWPKG_EOF'
 {
   "name": "playwright-renderer",
@@ -136,6 +141,7 @@ REND_EOF
 
       - name: Write engine and helper files
         run: |
+          mkdir -p engine
           cat > engine/niche-rotation.js <<'NICH_EOF'
 module.exports = ["Mindset & Motivation","Business & Entrepreneurship","AI Tools & Automation","Health & Fitness Tips"];
 NICH_EOF
@@ -154,7 +160,6 @@ CONT_EOF
           cat > .dockerignore <<'DCK_EOF'
 node_modules
 .git
-.gitignore
 .vscode
 *.log
 DCK_EOF
@@ -164,7 +169,7 @@ DCK_EOF
 
       - name: Commit & push changes
         run: |
-          git add Dockerfile package.json playwright/package.json server server/pinterest.js engine .dockerignore AUDIT.md || true
+          git add Dockerfile package.json playwright package.json server engine .dockerignore AUDIT.md || true
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else

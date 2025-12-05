@@ -1,110 +1,79 @@
-name: autopush-full
+name: Autopush to HuggingFace (safe, schedule)
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - main
-
-permissions:
-  contents: write
+    branches: ["main"]
+  workflow_dispatch:
+  schedule:
+    - cron: "0 */2 * * *"
 
 jobs:
-  autopush:
+  push-to-hf:
     runs-on: ubuntu-latest
-    env:
-      REPO: ${{ github.repository }}
     steps:
-      - name: Checkout
+
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Configure git for pushes
+      - name: Validate HF secrets
+        env:
+          HF_ACCESS_TOKEN: ${{ secrets.HF_ACCESS_TOKEN }}
+          HF_SPACE_OWNER: ${{ secrets.HF_SPACE_OWNER }}
+          HF_SPACE_NAME: ${{ secrets.HF_SPACE_NAME }}
         run: |
-          git config user.name "autopush-bot"
-          git config user.email "autopush-bot@sainath.ai"
-          # set remote using PAT from secrets (GH_PAT_ACCESS)
-          git remote set-url origin https://x-access-token:${{ secrets.GH_PAT_ACCESS }}@github.com/${{ env.REPO }}.git
+          if [ -z "${HF_ACCESS_TOKEN:-}" ]; then echo "ERROR: HF_ACCESS_TOKEN missing"; exit 2; fi
+          if [ -z "${HF_SPACE_OWNER:-}" ]; then echo "ERROR: HF_SPACE_OWNER missing"; exit 2; fi
+          if [ -z "${HF_SPACE_NAME:-}" ]; then echo "ERROR: HF_SPACE_NAME missing"; exit 2; fi
 
-      - name: Create folder structure
+      - name: Ensure full clone & install git-lfs
         run: |
-          mkdir -p server playwright engine/pinterest ollama/prompts n8n/workflows
+          set -eux
+          git fetch --unshallow || true
+          git fetch --all || true
+          sudo apt-get update -y
+          sudo apt-get install -y git-lfs || true
+          git lfs install --local || true
 
-      - name: Write Dockerfile
+      - name: Add HF remote and push (safe + retry)
+        env:
+          HF_ACCESS_TOKEN: ${{ secrets.HF_ACCESS_TOKEN }}
+          HF_SPACE_OWNER: ${{ secrets.HF_SPACE_OWNER }}
+          HF_SPACE_NAME: ${{ secrets.HF_SPACE_NAME }}
         run: |
-          cat > Dockerfile <<'DOCKER_EOF'
-FROM mcr.microsoft.com/playwright:v1.43.0-jammy
-WORKDIR /app
+          set -eux
+          HF_REMOTE="https://${HF_SPACE_OWNER}:${HF_ACCESS_TOKEN}@huggingface.co/spaces/${HF_SPACE_OWNER}/${HF_SPACE_NAME}.git"
+          git remote remove hf || true
+          git remote add hf "$HF_REMOTE"
+          git remote -v
+          git lfs fetch --all || true
+          git lfs pull --all || true
 
-# Copy root package metadata and install production deps
-COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev || npm install --production || true
+          for i in 1 2 3; do
+            echo "Attempt #$i to push to HF..."
+            if git push hf HEAD:main --force; then
+              echo "Push succeeded."
+              exit 0
+            fi
+            echo "Push failed; retrying in $((i*3))s..."
+            sleep $((i*3))
+            git fetch --all || true
+            git lfs fetch --all || true
+          done
 
-# Copy full repo contents
-COPY . .
+          echo "All push attempts failed."
+          git ls-remote hf || true
+          exit 1
 
-EXPOSE 3000
-EXPOSE 7860
-
-CMD ["node", "server/index.js"]
-DOCKER_EOF
-
-      - name: Write root package.json
+      - name: Trigger HF build (notify)
+        env:
+          HF_ACCESS_TOKEN: ${{ secrets.HF_ACCESS_TOKEN }}
+          HF_SPACE_OWNER: ${{ secrets.HF_SPACE_OWNER }}
+          HF_SPACE_NAME: ${{ secrets.HF_SPACE_NAME }}
         run: |
-          cat > package.json <<'PKG_EOF'
-{
-  "name": "sainathai-engine",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "start": "node server/index.js",
-    "start:dev": "NODE_ENV=development node server/index.js"
-  },
-  "dependencies": {
-    "express": "^4.18.2"
-  }
-}
-PKG_EOF
-
-      - name: Write playwright package.json
-        run: |
-          mkdir -p playwright
-          cat > playwright/package.json <<'PWKG_EOF'
-{
-  "name": "sainathai-playwright",
-  "version": "0.1.0",
-  "private": true,
-  "dependencies": {
-    "playwright": "1.43.0"
-  },
-  "scripts": {
-    "test": "echo \"no tests\""
-  }
-}
-PWKG_EOF
-
-      - name: Write server index.js (health endpoint)
-        run: |
-          mkdir -p server
-          cat > server/index.js <<'SRV_EOF'
-const express = require('express');
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.get('/healthz', (req, res) => res.send('OK'));
-app.get('/', (req, res) => res.send('SainathAI Pinterest Engine — OK'));
-
-app.listen(PORT, () => {
-  console.log(`Server listening on ${PORT}`);
-});
-SRV_EOF
-
-      - name: Stage and commit changes
-        run: |
-          git add -A
-          git commit -m "chore: autopush — write Dockerfile, package.json, server/index.js" || echo "No changes to commit"
-
-      - name: Push to main
-        run: |
-          git push origin HEAD:main
+          set -eux
+          curl -s -X POST -H "Authorization: Bearer ${HF_ACCESS_TOKEN}" \
+            "https://huggingface.co/api/spaces/${HF_SPACE_OWNER}/${HF_SPACE_NAME}/build" -o /tmp/hf_build.json || true
+          echo "HF build response:"
+          sed -n '1,200p' /tmp/hf_build.json || true

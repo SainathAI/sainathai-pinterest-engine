@@ -1,46 +1,53 @@
-name: Push to HuggingFace
-
-on:
-  push:
-    branches: [ "main" ]
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Configure Git
-        run: |
-          git config --global user.email "bot@sainathai.com"
-          git config --global user.name "SainathAI Bot"
-
-      - name: Push to HF
+      - name: Add HF remote and push (unshallow + LFS + retry)
         env:
           HF_ACCESS_TOKEN: ${{ secrets.HF_ACCESS_TOKEN }}
           HF_SPACE_OWNER: ${{ secrets.HF_SPACE_OWNER }}
           HF_SPACE_NAME: ${{ secrets.HF_SPACE_NAME }}
         run: |
-          if [ -z "$HF_ACCESS_TOKEN" ] || [ -z "$HF_SPACE_OWNER" ] || [ -z "$HF_SPACE_NAME" ]; then
-            echo "ERROR: Missing HF secrets"
-            exit 1
+          set -euxo pipefail
+
+          # ensure non-shallow clone so HF accepts update
+          echo "Ensuring full history (unshallow if needed)..."
+          if git rev-parse --is-shallow-repository >/dev/null 2>&1 && [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+            git fetch --unshallow || git fetch --depth=2147483647 || true
+          else
+            git fetch --all || true
           fi
-          set -eux
-          git remote remove hf || true
-          git remote add hf "https://${HF_SPACE_OWNER}:${HF_ACCESS_TOKEN}@huggingface.co/spaces/${HF_SPACE_OWNER}/${HF_SPACE_NAME}.git"
-          git push hf HEAD:main --force
 
-      - name: Trigger HF rebuild
-        env:
-          HF_ACCESS_TOKEN: ${{ secrets.HF_ACCESS_TOKEN }}
-          HF_SPACE_OWNER: ${{ secrets.HF_SPACE_OWNER }}
-          HF_SPACE_NAME: ${{ secrets.HF_SPACE_NAME }}
-        run: |
-          curl -X POST \
-               -H "Authorization: Bearer ${HF_ACCESS_TOKEN}" \
-               "https://huggingface.co/api/spaces/${HF_SPACE_OWNER}/${HF_SPACE_NAME}/build"
+          # Ensure git-lfs present and pull LFS objects (HF Spaces uses LFS)
+          echo "Installing git lfs and fetching LFS objects..."
+          git lfs version || (curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | sudo bash && sudo apt-get update && sudo apt-get install -y git-lfs) || true
+          git lfs install --local || true
+          # fetch and pull LFS objects if any
+          git lfs fetch --all || true
+          git lfs pull --all || true
+
+          # add HF remote (masked)
+          HF_REMOTE_URL="https://${HF_SPACE_OWNER}:${HF_ACCESS_TOKEN}@huggingface.co/spaces/${HF_SPACE_OWNER}/${HF_SPACE_NAME}.git"
+          git remote remove hf || true
+          git remote add hf "${HF_REMOTE_URL}"
+          git remote -v
+
+          # try pushing with retries (addresses transient HF LFS/internal errors)
+          ATTEMPTS=3
+          for i in $(seq 1 $ATTEMPTS); do
+            echo "Push attempt ${i}..."
+            if git push hf HEAD:main --force; then
+              echo "GIT PUSH: SUCCESS"
+              break
+            else
+              echo "GIT PUSH: FAILED on attempt ${i}"
+              # wait and retry, except after last attempt
+              if [ "$i" -lt "$ATTEMPTS" ]; then
+                sleep $((i * 3))
+                # try re-fetch LFS/refs before next attempt
+                git fetch --all || true
+                git lfs fetch --all || true
+              else
+                echo "All push attempts failed."
+                # show remote info to debug
+                git ls-remote hf || true
+                exit 1
+              fi
+            fi
+          done

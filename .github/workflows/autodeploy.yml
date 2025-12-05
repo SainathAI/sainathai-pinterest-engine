@@ -1,60 +1,109 @@
-name: SainathAI - FULL AUTO DEPLOY ENGINE
+name: Diagnose CI / HF Connectivity
 
 on:
-  push:
-    branches: [ "main" ]
   workflow_dispatch:
-  schedule:
-    - cron: "*/15 * * * *"   # every 15 minutes auto-repair
+
+permissions:
+  contents: read
+  actions: read
 
 jobs:
-  autopush-and-deploy:
+  diagnose:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout code
+    - name: Checkout (read-only)
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
 
-    - name: Configure Git User
+    - name: Show runner info
       run: |
-        git config --global user.email "bot@sainathai.com"
-        git config --global user.name "SainathAI Bot"
+        echo "Runner: $RUNNER_OS / $RUNNER_TEMP"
+        echo "Commit: $GITHUB_SHA"
+        uname -a || true
+        python3 --version || true
+        git --version || true
 
-    - name: Sync Repository Files (Auto-Rebuild Repo)
+    - name: List workflow files
       run: |
-        mkdir -p $GITHUB_WORKSPACE
-        # THIS BLOCK IS THE BRAIN OF YOUR REPO — CODE WILL ALWAYS BE PRESENT
-        # If files go missing or corrupted, HF or GH will regenerate them
-        cat > engine.txt << 'EOF'
-THIS FILE CONFIRMS FULL AUTOMATION.
-THE ACTUAL CODEBASE IS CONTROLLED BY CHATGPT THROUGH GITHUB ACTIONS.
-NEVER DELETE THIS WORKFLOW.
-EOF
+        echo "Workflows:"
+        ls -la .github/workflows || true
+        echo "Repo root files:"
+        ls -la || true
 
-        # Force-add ensures repo never goes empty or broken
-        git add -A
-        git commit -m "AUTO: Repo Sync / Self-Rebuild" || echo "No changes"
-        git push origin main --force
+    - name: Print expected secrets (masked if present)
+      run: |
+        echo "Checking critical secrets (prints 'SET' or 'MISSING')"
+        for s in HF_ACCESS_TOKEN HF_SPACE_OWNER HF_SPACE_NAME OPEN_AI_KEY PINTEREST_ACCESS_TOKEN GH_PAT_ACCESS; do
+          if [ -z "${!s:-}" ]; then
+            echo "$s = MISSING"
+          else
+            echo "$s = SET"
+          fi
+        done
 
-    - name: Push to HuggingFace Space
+    - name: Test GitHub auth with GH CLI (if present)
       env:
-        HF_ACCESS_TOKEN: ${{ secrets.HF_ACCESS_TOKEN }}
-        HF_SPACE_OWNER: ${{ secrets.HF_SPACE_OWNER }}
-        HF_SPACE_NAME: ${{ secrets.HF_SPACE_NAME }}
+        GH_PAT: ${{ secrets.GH_PAT_ACCESS }}
       run: |
-        echo "Pushing to HuggingFace..."
-        git remote add hf \
-          https://${HF_SPACE_OWNER}:${HF_ACCESS_TOKEN}@huggingface.co/spaces/${HF_SPACE_OWNER}/${HF_SPACE_NAME}.git \
-          || true
-        git push hf main --force || true
+        if command -v gh >/dev/null 2>&1; then
+          echo "gh version:"
+          gh --version
+          echo "Attempting gh auth status (will fail if token invalid)"
+          echo "$GH_PAT" | gh auth login --with-token || echo "gh auth login failed"
+        else
+          echo "gh not available on runner (not required)"
+        fi
 
-    - name: Trigger Rebuild on HF (Self-Heal)
+    - name: Test HuggingFace API token (simple build trigger) 
       env:
-        HF_ACCESS_TOKEN: ${{ secrets.HF_ACCESS_TOKEN }}
-        HF_SPACE_OWNER: ${{ secrets.HF_SPACE_OWNER }}
-        HF_SPACE_NAME: ${{ secrets.HF_SPACE_NAME }}
+        HF_TOKEN: ${{ secrets.HF_ACCESS_TOKEN }}
+        HF_OWNER: ${{ secrets.HF_SPACE_OWNER }}
+        HF_SPACE: ${{ secrets.HF_SPACE_NAME }}
       run: |
-        curl -X POST \
-        -H "Authorization: Bearer ${HF_ACCESS_TOKEN}" \
-        https://huggingface.co/api/spaces/${HF_SPACE_OWNER}/${HF_SPACE_NAME}/build
-        echo "HF rebuild triggered."
+        echo "HF_OWNER=${HF_OWNER:-<unset>}"
+        echo "HF_SPACE=${HF_SPACE:-<unset>}"
+        if [ -z "${HF_TOKEN}" ]; then
+          echo "HF_ACCESS_TOKEN MISSING - cannot call HF API"
+          exit 0
+        fi
+        # call HF space API (safe POST) and show status
+        resp=$(curl -s -o /tmp/hf_resp.txt -w "%{http_code}" -X POST -H "Authorization: Bearer ${HF_TOKEN}" "https://huggingface.co/api/spaces/${HF_OWNER}/${HF_SPACE}/build" || true)
+        echo "HTTP_CODE=${resp}"
+        echo "Response body:"
+        sed -n '1,200p' /tmp/hf_resp.txt || true
+        # show common failure hints
+        if [ "${resp}" = "401" ] || [ "${resp}" = "403" ]; then
+          echo "HF API returned 401/403: token likely invalid or missing required scopes."
+        fi
+
+    - name: Test reaching OpenAI endpoints (check connectivity)
+      env:
+        OPEN_AI_KEY: ${{ secrets.OPEN_AI_KEY }}
+      run: |
+        if [ -z "${OPEN_AI_KEY}" ]; then
+          echo "OPEN_AI_KEY missing - skipping OpenAI check"
+        else
+          # Lightweight check to avoid quota usage - list models
+          http_code=$(curl -s -o /tmp/openai.txt -w "%{http_code}" -H "Authorization: Bearer ${OPEN_AI_KEY}" "https://api.openai.com/v1/models" || true)
+          echo "OpenAI models list HTTP=${http_code}"
+          sed -n '1,120p' /tmp/openai.txt || true
+        fi
+
+    - name: Test Git remote push permission (dry-run)
+      env:
+        GH_PAT: ${{ secrets.GH_PAT_ACCESS }}
+      run: |
+        if [ -z "${GH_PAT}" ]; then
+          echo "GH_PAT_ACCESS missing - skipping git push test"
+          exit 0
+        fi
+        # Create a test temp branch and attempt to push a light tag to origin (uses PAT)
+        git remote set-url origin "https://${{ github.actor }}:${GH_PAT}@github.com/${{ github.repository }}.git" || true
+        git fetch origin || true
+        # Try a dry-run push (no changes) to validate auth
+        git push --dry-run origin HEAD:refs/heads/diagnose-auth-check || echo "dry-run push returned non-zero (may still be ok)"
+
+    - name: Output final hint summary
+      run: |
+        echo "DIAGNOSTIC COMPLETE - check the step logs above for HTTP codes and messages."

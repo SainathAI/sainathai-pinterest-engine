@@ -5,6 +5,8 @@ def test():
 
 with gr.Blocks() as demo:
     out = gr.JSON()
-    gr.Button("Ping").click(lambda: test(), outputs=out)
+    btn = gr.Button("Ping")
+    # correct: pass function reference and outputs, don't call the function here
+    btn.click(fn=test, inputs=None, outputs=out)
 
 demo.launch()

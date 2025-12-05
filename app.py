@@ -1,12 +1,10 @@
 import gradio as gr
 
-def health():
+def test():
     return {"ok": True}
 
 with gr.Blocks() as demo:
-    gr.Markdown("# Engine Test")
     out = gr.JSON()
-    btn = gr.Button("Check")
-    btn.click(lambda: health(), outputs=[out])
+    gr.Button("Ping").click(lambda: test(), outputs=out)
 
 demo.launch()

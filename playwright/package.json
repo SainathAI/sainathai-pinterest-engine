@@ -1,14 +1,16 @@
 {
-  "name": "sainathai-playwright",
+  "name": "playwright-service",
   "version": "1.0.0",
+  "description": "SainathAI Playwright worker",
   "main": "render_canva.js",
   "scripts": {
-    "start": "node server/index.js",
-    "dev": "node server/index.js"
+    "start": "node render_canva.js",
+    "health": "node -e \"console.log('OK')\""
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "node-fetch": "^2.6.7",
-    "playwright": "^1.43.0"
+    "axios": "^1.4.0"
+  },
+  "engines": {
+    "node": "18.x"
   }
 }

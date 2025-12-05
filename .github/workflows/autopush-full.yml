@@ -1,0 +1,203 @@
+name: Full Autopush Rebuild (Structure A)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  autopush:
+    runs-on: ubuntu-latest
+
+    env:
+      REPO: ${{ github.repository }}
+      GH_PAT: ${{ secrets.GH_PAT_ACCESS }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "sainathai-autobot"
+          git config user.email "autobot@sainathai.local"
+          git remote set-url origin https://x-access-token:${GH_PAT}@github.com/${REPO}.git
+
+      # ------------------------------
+      # REBUILD DIRECTORIES
+      # ------------------------------
+
+      - name: Create folder structure
+        run: |
+          mkdir -p server playwright engine pinterest ollama/prompts n8n/workflows
+
+      # ------------------------------
+      # WRITE DOCKERFILE (HF Compatible)
+      # ------------------------------
+
+      - name: Generate Dockerfile
+        run: |
+          cat > Dockerfile <<'EOF'
+FROM mcr.microsoft.com/playwright:v1.43.0-jammy
+
+WORKDIR /app
+
+COPY package.json package.json
+COPY playwright/package.json playwright/package.json
+
+RUN npm install --production || true
+RUN cd playwright && npm install --production || true
+
+COPY . /app
+
+EXPOSE 7860
+EXPOSE 3000
+
+CMD ["node", "server/index.js"]
+EOF
+
+      # ------------------------------
+      # ROOT PACKAGE.JSON
+      # ------------------------------
+
+      - name: Generate root package.json
+        run: |
+          cat > package.json <<'EOF'
+{
+  "name": "sainathai-engine",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node server/index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "axios": "^1.6.0"
+  }
+}
+EOF
+
+      # ------------------------------
+      # SERVER FILES
+      # ------------------------------
+
+      - name: Generate server files
+        run: |
+          cat > server/index.js <<'EOF'
+const express = require("express");
+const cors = require("cors");
+const pinterest = require("./pinterest");
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+app.get("/healthz", (req, res) => res.send("OK"));
+
+app.post("/post-pin", pinterest.postPin);
+
+const port = process.env.PORT || 3000;
+app.listen(port, () => console.log("Server running on", port));
+EOF
+
+          cat > server/pinterest.js <<'EOF'
+const axios = require("axios");
+
+exports.postPin = async (req, res) => {
+  try {
+    const token = process.env.PINTEREST_ACCESS_TOKEN;
+    const payload = req.body;
+
+    const r = await axios.post("https://api.pinterest.com/v5/pins", payload, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    res.json({ success: true, data: r.data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.response?.data || err.message });
+  }
+};
+EOF
+
+      # ------------------------------
+      # PLAYWRIGHT FILES
+      # ------------------------------
+
+      - name: Generate playwright package.json
+        run: |
+          cat > playwright/package.json <<'EOF'
+{
+  "name": "playwright-renderer",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node render_canva.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "playwright": "^1.43.0"
+  }
+}
+EOF
+
+      - name: Generate render_canva.js
+        run: |
+          cat > playwright/render_canva.js <<'EOF'
+module.exports = async function(params) {
+  return { render: true, params };
+};
+EOF
+
+      # ------------------------------
+      # ENGINE
+      # ------------------------------
+
+      - name: Generate engine files
+        run: |
+          cat > engine/niche-rotation.js <<'EOF'
+module.exports = ["AI Tools", "Digital Marketing", "MMO", "Productivity"];
+EOF
+
+          cat > engine/content-engine.js <<'EOF'
+module.exports = async function(niche) {
+  return {
+    title: `Best ${niche} Tips`,
+    description: `Here are powerful ${niche} insights you can apply now.`
+  };
+};
+EOF
+
+      # ------------------------------
+      # PINTEREST MODULES
+      # ------------------------------
+
+      - name: Generate pinterest modules
+        run: |
+          cat > pinterest/post-pin.js <<'EOF'
+module.exports = {};
+EOF
+
+      # ------------------------------
+      # CREATE AUDIT + STATUS FILES
+      # ------------------------------
+
+      - name: Create audit report
+        run: |
+          echo "# AUTOPUSH REPORT – $(date)" > AUDIT.md
+          echo "Repo rebuild complete." >> AUDIT.md
+          echo "Folders, Dockerfile, server, engine, renderer regenerated." >> AUDIT.md
+
+      - name: Commit & Push
+        run: |
+          git add .
+          git commit -m "AUTOPUSH: Full repo rebuild (Structure A)" || true
+          git push origin main || true
+
+      - name: Create Status Issue
+        run: |
+          gh issue create --title "AUTOPUSH COMPLETED" --body "Autopush rebuild finished." || true

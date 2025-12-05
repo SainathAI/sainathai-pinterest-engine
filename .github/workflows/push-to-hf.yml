@@ -9,8 +9,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
+
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Push to HF
-        run: echo "Test push successful"
+      - name: Test Push
+        run: echo "Push-to-HF workflow is working"

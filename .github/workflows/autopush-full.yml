@@ -29,7 +29,7 @@ jobs:
 
       - name: Create folder structure
         run: |
-          mkdir -p server playwright engine/pinterest ollama/prompts n8n/workflows
+          mkdir -p server playwright engine pinterest ollama/prompts n8n/workflows || true
 
       - name: Write Dockerfile (HF-compatible)
         run: |
@@ -38,17 +38,18 @@ FROM mcr.microsoft.com/playwright:v1.43.0-jammy
 
 WORKDIR /app
 
-# Copy root package if exists (keeps build tolerant)
+# Copy package metadata (root + playwright)
 COPY package.json package.json
 COPY playwright/package.json playwright/package.json
 
-# Install dependencies (best-effort; allow failure to avoid fast crash)
+# Install dependencies (best-effort; some CI images restrict downloads)
 RUN npm install --production || true
-RUN if [ -f playwright/package.json ]; then (cd playwright && npm install --production) || true; fi
+RUN cd playwright && npm install --production || true
 
-# Copy whole repo into container
+# Copy project
 COPY . /app
 
+# Ports (sample)
 EXPOSE 7860
 EXPOSE 3000
 
@@ -112,7 +113,7 @@ exports.postPin = async (req, res) => {
 };
 PIN_EOF
 
-      - name: Write playwright package.json
+      - name: Write playwright package.json and placeholder
         run: |
           mkdir -p playwright
           cat > playwright/package.json <<'PWPKG_EOF'
@@ -130,16 +131,14 @@ PIN_EOF
 }
 PWPKG_EOF
 
-      - name: Write render_canva.js placeholder
-        run: |
           cat > playwright/render_canva.js <<'REND_EOF'
 module.exports = async function(params) {
-  // placeholder renderer function — real renderer will be added next
+  // placeholder renderer function — real renderer will be added later
   return { ok: true, params };
 };
 REND_EOF
 
-      - name: Write engine and helper files
+      - name: Write engine helper files
         run: |
           mkdir -p engine
           cat > engine/niche-rotation.js <<'NICH_EOF'
@@ -160,6 +159,7 @@ CONT_EOF
           cat > .dockerignore <<'DCK_EOF'
 node_modules
 .git
+.gitignore
 .vscode
 *.log
 DCK_EOF
@@ -169,10 +169,10 @@ DCK_EOF
 
       - name: Commit & push changes
         run: |
-          git add Dockerfile package.json playwright package.json server engine .dockerignore AUDIT.md || true
+          git add Dockerfile package.json playwright/package.json server engine .dockerignore AUDIT.md || true
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "AUTOPUSH: full repo rebuild (Structure A)"
+            git commit -m "AUTOPUSH: full repo rebuild (Structure A)" || true
             git push origin HEAD:main
           fi

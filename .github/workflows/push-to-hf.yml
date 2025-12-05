@@ -1,0 +1,46 @@
+name: Push to HuggingFace
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Git
+        run: |
+          git config --global user.email "bot@sainathai.com"
+          git config --global user.name "SainathAI Bot"
+
+      - name: Push to HF
+        env:
+          HF_ACCESS_TOKEN: ${{ secrets.HF_ACCESS_TOKEN }}
+          HF_SPACE_OWNER: ${{ secrets.HF_SPACE_OWNER }}
+          HF_SPACE_NAME: ${{ secrets.HF_SPACE_NAME }}
+        run: |
+          if [ -z "$HF_ACCESS_TOKEN" ] || [ -z "$HF_SPACE_OWNER" ] || [ -z "$HF_SPACE_NAME" ]; then
+            echo "ERROR: Missing HF secrets"
+            exit 1
+          fi
+          set -eux
+          git remote remove hf || true
+          git remote add hf "https://${HF_SPACE_OWNER}:${HF_ACCESS_TOKEN}@huggingface.co/spaces/${HF_SPACE_OWNER}/${HF_SPACE_NAME}.git"
+          git push hf HEAD:main --force
+
+      - name: Trigger HF rebuild
+        env:
+          HF_ACCESS_TOKEN: ${{ secrets.HF_ACCESS_TOKEN }}
+          HF_SPACE_OWNER: ${{ secrets.HF_SPACE_OWNER }}
+          HF_SPACE_NAME: ${{ secrets.HF_SPACE_NAME }}
+        run: |
+          curl -X POST \
+               -H "Authorization: Bearer ${HF_ACCESS_TOKEN}" \
+               "https://huggingface.co/api/spaces/${HF_SPACE_OWNER}/${HF_SPACE_NAME}/build"

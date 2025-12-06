@@ -5,8 +5,6 @@ def test():
 
 with gr.Blocks() as demo:
     out = gr.JSON()
-    btn = gr.Button("Ping")
-    btn.click(fn=test, inputs=None, outputs=out)
+    gr.Button("Ping").click(fn=test, outputs=out)
 
-if __name__ == "__main__":
-    demo.launch()
+demo.launch()

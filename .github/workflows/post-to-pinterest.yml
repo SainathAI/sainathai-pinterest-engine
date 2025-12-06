@@ -1,0 +1,36 @@
+name: Daily Pinterest Posting
+
+on:
+  schedule:
+    - cron: "0 3 * * *"   # runs daily at 3 AM
+  workflow_dispatch:
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install Node
+      uses: actions/setup-node@v3
+      with:
+        node-version: 18
+
+    - name: Install Playwright
+      run: |
+        cd playwright
+        npm install
+        npx playwright install chromium
+
+    - name: Extract image from latest HF output
+      run: |
+        mkdir temp
+        unzip outputs/latest.zip -d temp
+
+    - name: Post to Pinterest
+      env:
+        PINTEREST_EMAIL: ${{ secrets.PINTEREST_EMAIL }}
+        PINTEREST_PASSWORD: ${{ secrets.PINTEREST_PASSWORD }}
+      run: |
+        node playwright/post_to_pinterest.js "temp/1.png" "Daily AI Pin" "Posted using SainathAI Engine"

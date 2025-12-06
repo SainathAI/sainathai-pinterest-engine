@@ -1,2 +1,0 @@
-#!/bin/sh
-pip install --no-cache-dir --upgrade "gradio>=5.7.1" "huggingface-hub>=1.0.0"

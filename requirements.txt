@@ -1,4 +1,7 @@
-gradio>=5.7.1
-huggingface-hub>=1.0.0
-uvicorn>=0.14.0
 fastapi
+uvicorn
+requests
+python-multipart
+pillow
+jinja2
+pydantic

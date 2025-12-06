@@ -1,0 +1,17 @@
+name: Push to HuggingFace
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Test Push
+        run: echo "Push-to-HF workflow is working"

@@ -1,0 +1,16 @@
+name: Autopush to HF
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+jobs:
+  autopush:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Autopush test
+        run: echo "Autopush working"

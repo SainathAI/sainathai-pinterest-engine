@@ -3,9 +3,9 @@ title: "SainathAI Pinterest Engine"
 sdk: "docker"
 app_file: "app.py"
 license: "apache-2.0"
-emoji: 🚀
-colorFrom: gray
-colorTo: blue
+emoji: "🚀"
+colorFrom: "gray"
+colorTo: "blue"
+pinned: false
 ---
-SainathAI Pinterest Engine — automated Pinterest pin generation and posting.
-Powered by Docker, Playwright, and custom workflow logic.
+Automated Pinterest Engine powered by Docker + Playwright.

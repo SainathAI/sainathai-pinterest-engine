@@ -1,7 +1,8 @@
 ---
 title: "SainathAI Pinterest Engine"
-language: "en"
 sdk: "docker"
-license: "apache-2.0"
+language: "en"
 app_file: "app.py"
+license: "apache-2.0"
 ---
+A Docker-based Hugging Face Space for automated Pinterest pin generation and posting.

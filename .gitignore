@@ -3,3 +3,10 @@
 outputs/
 *.zip
 
+# legacy isolation
+_legacy/
+logs/
+*.bak
+playwright_storage_state.json
+
+

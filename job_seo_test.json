@@ -1,0 +1,41 @@
+{
+  "job_id": "job-SEO-001",
+  "type": "PUBLISH_PIN",
+  "account": {
+    "brand": "SainathAI",
+    "niche": "Medical Automation",
+    "authority_entity": "Healthcare Systems & Procurement"
+  },
+  "intent": {
+    "primary": "commercial",
+    "stage": "decision-maker",
+    "geo": "India"
+  },
+  "seo": {
+    "primary_keyword": "hospital automation systems",
+    "secondary_keywords": [
+      "healthcare automation",
+      "medical workflow software",
+      "hospital operations software"
+    ],
+    "title": "Hospital Automation Systems for Efficient Healthcare Operations",
+    "description": "Modern hospitals use automation systems to streamline operations, reduce errors, and improve patient care.\n\nDiscover AI-powered hospital automation solutions trusted by healthcare administrators and procurement teams.",
+    "hashtags": [
+      "#HospitalAutomation",
+      "#HealthcareAutomation",
+      "#MedicalSystems",
+      "#SainathAI"
+    ]
+  },
+  "monetization": {
+    "model": "affiliate_or_lead",
+    "offer_type": "B2B_SaaS",
+    "pricing_tier": "high_ticket",
+    "cta": "Request Demo",
+    "destination_url": "https://example.com/healthcare-automation"
+  },
+  "pin": {
+    "board_name": "Healthcare Automation",
+    "image_path": "assets/hospital_automation.png"
+  }
+}

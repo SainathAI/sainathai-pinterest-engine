@@ -1,0 +1,17 @@
+{
+  "job_id": "job-test-001",
+  "seo": {
+    "title": "Hospital Automation Software for Modern Clinics",
+    "description": "AI-powered hospital automation software to streamline operations and reduce costs.",
+    "hashtags": ["#HospitalAutomation", "#HealthTech", "#SainathAI"]
+  },
+  "pin": {
+    "board_name": "Medical Automation",
+    "image_path": "N/A"
+  },
+  "monetization": {
+    "tier": "high",
+    "cta": "Request Demo",
+    "destination_url": "https://example.com/hospital-automation"
+  }
+}
